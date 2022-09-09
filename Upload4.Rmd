@@ -1,0 +1,530 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+# Clasificación con árboles de decisión
+
+Para la siguiente clasificación haremos uso del dataset "German Credit"
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval=T, echo=T)
+```
+
+```{r}
+if(!require(ggplot2)){
+    install.packages('ggplot2', repos='http://cran.us.r-project.org')
+    library(ggplot2)
+}
+
+if(!require(ggpubr)){
+    install.packages('ggpubr', repos='http://cran.us.r-project.org')
+    library(ggpubr)
+}
+if(!require(grid)){
+    install.packages('grid', repos='http://cran.us.r-project.org')
+    library(grid)
+}
+if(!require(gridExtra)){
+    install.packages('gridExtra', repos='http://cran.us.r-project.org')
+    library(gridExtra)
+}
+
+if(!require(C50)){
+    install.packages('C50', repos='http://cran.us.r-project.org')
+    library(C50)
+}
+```
+```{r}
+if(!require(DescTools)){
+    install.packages('DescTools', repos='http://cran.us.r-project.org')
+    library(DescTools)
+}
+```
+```{r}
+if(!require(gmodels)){
+    install.packages('gmodels', repos='http://cran.us.r-project.org')
+    library(gmodels)
+}
+```
+
+```{r message= FALSE, warning=FALSE}
+data<-read.csv("D:/Data/credit.csv",header=T,sep=",")
+attach(data)
+```
+
+## Análisis descriptivo y de correlaciones
+
+Comenzamos realizando un análisis descriptivo de los datos mediante el cual descubriremos que está formado por 1000 registros con 21 variables y no tiene valores vacíos.
+```{r}
+dim(data)
+```
+
+```{r}
+str(data)
+
+```
+
+Podemos ver que tenemos 4 variables contínuas y el resto toman valores de un conjunto finito (Categóricas).
+
+Las variables obtenidas son las siguientes:
+
+Checking_balance          : Saldo de la cuenta (<0, >200, 1-200, desconocido)
+Months_loan_duration      : Duración en meses del crédito (múltiplos de 6 entre 6 y 72)
+Credit history            : Historial crediticio (Critical, delayed, fully repaid, fully repaid this bank, repaid)
+Purpose                   : Propósito del préstamo (car, furniture/equipment, radio/TV, domestic appliances, repairs, education, business, vacation/others)
+Amount                    : Cantidad numérica del préstamo
+Savings_balance           : Cantidad de ahorros (<100, >1000, 101-500, 501-1000, desconocido)
+employment_length         : Tiempo que ha estado empleado en años (>7, 0-1, 1-4, 4-7, desempleado)
+installment_rate          : Salario medio
+personal_status           : Status personal (Divorced male, female, married male, single male)
+other_debtors             : Otras entidades a la que debe (Co-aplicant, guarantor, none)
+residence_history         : Historia residencial (1:4)
+property                  : Propiedad (building society savings, other, real estate, desconocido)
+age                       : Edad
+installment_plan          : Plan de pago/cuotas (Bank, none, stores)
+housing                   : Domicilio (own, rent, or free)
+existing_credits          : Créditos existentes (1:4)
+default                   : Indica si es un cliente de riesgo o no  1 : Bad loan   2 : Good loan
+dependents                : Dependientes (1:2)
+telephone                 : tenencia de movil (yes/no)
+foreign_worker            : Trabajador extranjero (Yes/No)
+job                       : Trabajo (management self employed, skilled employed, unemployed non-resident, unsskilled resident)
+
+
+
+```{r}
+summary(data)
+
+```
+```{r}
+missing <- data[is.na(data),]
+dim(missing)
+
+```
+
+
+No tenemos valores perdidos por tanto no tendremos que tratar la información en ese sentido y estamos listos para comenzar el análisis.
+
+Primeramente crearemos un par de columnas más que nos ayudarán a comprender mejor los datos, estas serán un rango de edades de los solicitantes de créditos y otra un rango de meses de la duración de los créditos solicitados.
+
+
+## ANÁLISIS VISUAL:
+
+A continuación comenzaremos el análisis visual mediante la creación de una serie de plots, en base a estos comentaremos los resultados y veremos que variables nos interesa conservar y cuales parecen menos interesantes/útiles.
+
+```{r}
+grid.newpage()
+
+ggplot(data,aes(existing_credits))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="existing_credits", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("existing_credits")
+
+ggplot(data,aes(telephone))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="telephone", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("telephone")
+
+ggplot(data,aes(dependents))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="dependents", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("dependents")
+
+ggplot(data,aes(residence_history))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="residence_history", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("residence_history")
+
+ggplot(data,aes(checking_balance))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="checking_balance", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("checking_balance")
+
+ggplot(data,aes(credit_history))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="credit_history", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("credit_history")
+
+ggplot(data,aes(purpose))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="purpose", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("purpose")
+
+ggplot(data,aes(savings_balance))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="savings_balance", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("savings_balance")
+
+ggplot(data,aes(employment_length))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="employment_length", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("employment_length")
+
+ggplot(data,aes(personal_status))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="personal_status", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("personal_status")
+
+ggplot(data,aes(other_debtors))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="other_debtors", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("other_debtors")
+
+ggplot(data,aes(property))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="property", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("property")
+
+ggplot(data,aes(installment_plan))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="installment_plan", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("installment_plan")
+
+ggplot(data,aes(housing))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="housing", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("housing")
+
+ggplot(data,aes(job))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="job", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("job")
+
+ggplot(data,aes(foreign_worker))+geom_bar(aes(y = (..count..)/sum(..count..))) +labs(x="foreign_worker", y="Users")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("blue","#008000"))+ggtitle("foreign_worker")
+```
+De los datos obtenidos podemos observar los siguientes datos en términos generales: La aplastante mayoría de usuarios son trabajadores foráneos, los propósitos del crédito se utilizan principalmente para comprar radio/tv, coche o mobiliario respectivamente.De estos el 60% tenía unos ahorros menores de 100DM y algo menos de la mitad eran hombres solteros. La mayoría se trata de individuos empleados, con casa propia y sin deudas previas. Los tiempos de pago del crédito se centran entre los 6 y los 24 meses principalmente y los usuarios solicitantes suelen tener entre 18 y 40 años, a partir de esa edad la posibiliadd de solicitar un crédito decrece exponencialmente. La cantidad de usuarios que ha pagado sus creéditos anterioreses de más o menos el 47% frentea un 24% que tiene el historial crediticio en niveles críticos.
+
+Dado que nos interesa analizar esta información más a fondo la compararemos con la variable default que indica si son aptos o no para el crédito y sacaremos conclusiones realistas al respecto.
+
+Primeramente analizaremos las variables contínuas: Age, Installment_rate, Months_Loan_Duration y Amount.
+Crearemos una matriz de correlación con ellas
+```{r message= FALSE, warning=FALSE}
+data_Continous <- data[,c(2,5,8,13,17)]
+
+library(corrplot)
+corrplot(cor(data_Continous), order = 'hclust')
+```
+
+```{r message= FALSE, warning=FALSE}
+library(plyr)
+#Asi vemos la media de edad de cada grupo
+mu <- ddply(data_Continous, "default", summarise, grp.mean=mean(months_loan_duration))
+head(mu)
+
+ggplot(data_Continous, aes(x=months_loan_duration))+
+  geom_density()+facet_grid(default ~ .)+geom_vline(data=mu, aes(xintercept=grp.mean, color="red"),
+             linetype="dashed")
+
+mu <- ddply(data_Continous, "default", summarise, grp.mean=mean(age))
+head(mu)
+
+ggplot(data_Continous, aes(x=age))+
+  geom_density()+facet_grid(default ~ .)+geom_vline(data=mu, aes(xintercept=grp.mean, color="red"),
+             linetype="dashed")
+
+mu <- ddply(data_Continous, "default", summarise, grp.mean=mean(amount))
+head(mu)
+
+ggplot(data_Continous, aes(x=amount))+
+  geom_density()+facet_grid(default ~ .)+geom_vline(data=mu, aes(xintercept=grp.mean, color="red"),
+             linetype="dashed")
+
+mu <- ddply(data_Continous, "default", summarise, grp.mean=mean(installment_rate))
+head(mu)
+
+ggplot(data_Continous, aes(x=installment_rate))+
+  geom_density()+facet_grid(default ~ .)+geom_vline(data=mu, aes(xintercept=grp.mean, color="red"),
+             linetype="dashed")
+
+```
+Las 4 variables muestran fuertes diferencias en algunos aspectos por lo que parecen interesantes: 
+
+Podemos observar que las únicas variables que tienen una correlación notable son amount y months_loan_duration
+Respecto a cada variable individual observamos:
+
+La media de meses de "months loan duration" de los usuarios catalogados como con sin riesgo (2) es mayor que la de los usuarios catalogados como riesgo (1). Esto significa que las personas que piden un crédito de maás baja duración tienen menos tendencia a devolverlo
+
+Inviertiendo esta misma tendencia tenemos la cantidad, a menor cantidad del crédito mayor posibilidades de devolución hay frente a créditos más altos. Por encima de los 10000 vemos que el riesgo crece de forma exponencial.
+
+Respecto a la edad parece que el riesgo se concentra entre los mas jóvenes y los mas mayores. Además parece indicar que los usuarios jóvenes tienen especial tendencia a ser usuarios de riesgo.
+
+El "installment rate" también parece interesante, vemos que la diferencia entre usuarios de riesgo y de no riesgo es casi el doble en algunos tramos pero no se pueden sacar demasiadas conclusiones tangibles. Podríamos decir que la media de salario de los usuarios que no suponen un riesgo es mayor que la de aquellos que si que lo suponen.
+
+
+
+Para analizar las variables categóricas haremos uso de Cramer y Phi,el valor de la V de Cramer nos dará la intensidad de la relación entre dos variables que en este caso por ser una matriz 2x2 tendrá el mimsmo valor que Phi.
+
+```{r}
+tabla_1 <- table(checking_balance, default)
+tabla_2 <- table(credit_history, default)
+tabla_3 <- table(purpose, default)
+tabla_4 <- table(savings_balance, default)
+tabla_5 <- table(employment_length, default)
+tabla_6 <- table(installment_rate, default)
+tabla_7 <- table(personal_status, default)
+tabla_8 <- table(other_debtors, default)
+tabla_9 <- table(residence_history, default)
+tabla_10 <- table(property, default)
+tabla_11 <- table(installment_plan, default)
+tabla_12 <- table(housing, default)
+tabla_13 <- table(existing_credits, default)
+tabla_14 <- table(dependents, default)
+tabla_15 <- table(telephone, default)
+tabla_16 <- table(foreign_worker, default)
+tabla_17 <- table(job, default)
+```
+
+```{r}
+Phi(tabla_1) 
+CramerV(tabla_1)
+Phi(tabla_2) 
+CramerV(tabla_2)
+Phi(tabla_3) 
+CramerV(tabla_3)
+Phi(tabla_4) 
+CramerV(tabla_4)
+Phi(tabla_5) 
+CramerV(tabla_5)
+Phi(tabla_6) 
+CramerV(tabla_6)
+Phi(tabla_7) 
+CramerV(tabla_7)
+Phi(tabla_8) 
+CramerV(tabla_8)
+Phi(tabla_9) 
+CramerV(tabla_9)
+Phi(tabla_10) 
+CramerV(tabla_10)
+Phi(tabla_11) 
+CramerV(tabla_11)
+Phi(tabla_12) 
+CramerV(tabla_12)
+Phi(tabla_13) 
+CramerV(tabla_13)
+Phi(tabla_14) 
+CramerV(tabla_14)
+Phi(tabla_15) 
+CramerV(tabla_15)
+Phi(tabla_16) 
+CramerV(tabla_16)
+Phi(tabla_17) 
+CramerV(tabla_17)
+
+```
+En base a los resultados obtenidos observamos que todas nuestras relaciones tienen una asociación estadística baja excepto en una, la relación con checking_balance  tiene un valor de 0.35 y por tanto se considera una relación estadística media (aunque está cerca del corte por debajo pues el rango es entre 0.3 y 0.5),  lo cual indica que hay una posible relación entre las variables. En este caso tenemos valores muy próximos a 0 en el resto, es decir, ambos factores serían independientes.
+
+Graficaremos los datos comentados.
+
+```{r}
+par(mfrow=c(2,2))
+plot(tabla_1, col = c("black","#008000"), main = "Default vs. checking_balance")
+plot(tabla_2, col = c("black","#008000"), main = "Default vs. credit_history")
+plot(tabla_3, col = c("black","#008000"), main = "Default vs. purpose")
+
+plot(tabla_4, col = c("black","#008000"), main = "Default vs. savings_balance")
+plot(tabla_5, col = c("black","#008000"), main = "Default vs. employment_length")
+plot(tabla_6, col = c("black","#008000"), main = "Default vs. installment_rate")
+
+
+plot(tabla_7, col = c("black","#008000"), main = "Default vs. personal_status")
+plot(tabla_8, col = c("black","#008000"), main = "Default vs. other_debtors")
+plot(tabla_9, col = c("black","#008000"), main = "Default vs. residence_history")
+
+
+plot(tabla_10, col = c("black","#008000"), main = "Default vs. property")
+plot(tabla_11, col = c("black","#008000"), main = "Default vs. installment_plan")
+plot(tabla_12, col = c("black","#008000"), main = "Default vs. housing")
+
+plot(tabla_13, col = c("black","#008000"), main = "Default vs. existing_credits")
+plot(tabla_14, col = c("black","#008000"), main = "Default vs. dependents")
+plot(tabla_15, col = c("black","#008000"), main = "Default vs. telephone")
+
+plot(tabla_16, col = c("black","#008000"), main = "Default vs. foreign_worker")
+plot(tabla_17, col = c("black","#008000"), main = "Default vs. job")
+```
+
+Del "checking balance" observamos que aquellos que tienen uno "unknown" tienden a conllevar más riesgo
+
+Del "credit history" observamos que aquellos con un historial "critical" o "Repaid" tienen mayor cantidad de usuarios catalogados como "críticos" (1) mientras que auqellos que si que han pagado sus créditos previos tienen menos tendencia a ser críticos.
+
+Del propósito del préstamo se observa que cuando se trata de coches, reparaciones y otros el riesgo es mayor que con el resto. Este dato va muy unido al que hemos observado antes en el que mencionábamos que a mayor cantidad mayor riesgo, vemos que los propósitos mas caros también suponen mayor riesgo.
+
+También destacaremos que en menor escala: los que no son trabajadores foráneos, los que son tienen la categoría de "guaranter" en otras deudas, o los hombres solteros tienen mayor riesgo de ser un cliente crítico.
+
+En términos generales observamos que los usuarios acomodados (trabajo, salario alto, casa propia, historial crediticio limpio) suponen un riesgo ás bajo que aquellos menos acomodados (sin trabajo, salario bajo, créditos pendientes y varios créditos asignados en la actualidad).
+
+Visto lo anterior podríamos considerar que nuestras variables más interesantes son:
+Age, Months_loan_duration, Amount, Ckecking_balance, Credit_history, purpose, foreign_worker, other_debtors, personal_status.
+
+Hay que tener en cuenta que para el posterior uso en el árbol nos interesan variables con alta capacidad discriminante, esto es un problema porque nuestras variables continuas numéricas como pueden ser Amount o age no cumplen con ello. Por esta razón discretizaremos estas variables y convertiremos las antes mencionadas en grupos finitos.
+
+```{r message= FALSE, warning=FALSE}
+data["months_loan_duration_range"] <- cut(data$months_loan_duration, breaks = c(0,12,24,36,48,60,72), 
+labels = c("0-12", "12-24", "24-36", "36-48", "48-60", "60-72"), include.lowest = FALSE)
+
+data["age_ranges"] <- cut(data$age, breaks = c(19,29,41,55,100), 
+labels = c("19-29", "30-40", "41-55", ">55"), include.lowest = FALSE)
+
+
+data["amount_range"] <- cut(data$amount, breaks = c(250,2500,5000,7500,10000,20000), 
+labels = c("250-2500", "2500-5000", "5000-7500", "7500-10000", ">10000"), include.lowest = FALSE)
+```
+
+Para confirmar los datos vamoms a realizar una comparativa en el funcionamiento de las variables discretizadas haciendo uso de la librería Boruta.
+Ya que a pesar de lo mencionado previamente, el proceso de discretización de una variable puede implicar pérdida de información y por tanto será menos efectiva que la variable original.
+Este algoritmo hace uso de un "random forest" e intenta capturar todas las características importantes e interesantes que pueda tener en su conjunto de datos. Posteriormente nos muestra un plot con la importancia de cada variable.
+
+```{r message= FALSE, warning=FALSE}
+library(Boruta)
+boruta_output <- Boruta(default ~ ., data=na.omit(data), doTrace=2)  
+boruta_signif <- names(boruta_output$finalDecision[boruta_output$finalDecision %in% c("Confirmed", "Tentative")])  # collect Confirmed and Tentative variables
+print(boruta_signif)  # significant variables
+
+plot(boruta_output, cex.axis=.7, las=2, xlab="", main="Variable Importance")  # plot variable importance
+```
+
+Vemos que los resultados tienen cierta similitud con las variables que habíamos elegido nosotros de forma manual.
+Respecto a las variables discretizadas vemos que en nuestro caso, a pesar de qe los rangos de importancia son muy similares, no comportan una mejora respecto a las originales por lo que no haremos uso de ellas.
+
+
+## Primer árbol de decisión
+Para construir el arbol de decisión tendremos que hacer una elección de variables, en el hipotético caso de usar las 20 que tenemos, además de producir un modelo prácticamente ilegible, crearía un claro problema de overfitting, estaríamos creado un arbol sobreentrenado, muy específico para nuestro conjunto de entrenamiento pero que funcionaría mal con nuevos conjuntos de datos.
+
+Ya hemos intuido que variables son mas útiles y cuales no en base a los análisis, según esto hemos escogido las variables más discriminantes, estas son aquellas cuyas respuestas permiten descartar grupos más amplios y hemos mostrado el plot de importancia obtenido por boruta.
+Ahora procederemos a crear nuestro árbol haciendo uso de una selección de estas:
+
+Hay que tener en cuenta que debemos tener un equilibrio entre unos buenos resultados y un árbol no muy complejo (A más complejo más específico, menos legible y más peligro de overfitting), es importante que con el mínimo número de preguntas tengamos una respuesta suficientemente detallada.
+
+Como hemos mencionado antes nos interesan las variables más discriminantes, esto es que intentaremos priorizar las variables categóricas, y cuantos menos campos tengan mejor se comportarán.
+Primeramente elegiremos "checking_balance" porque su importancia destaca sobre el resto según muestra Boruta algo que ya habíamos mencionado durante el proceso de Cramer V.
+
+La segunda variable que elegiremos es "months_loan_duration", si analizamos los datos podemos ver que a pesar de ser una variable no categórica, esta toma valores múltiplos de 6 y únicamente hasta el 72, por tanto puede funcionar bien.
+
+No ocurre lo mismo con amount, esta variable es contínua, su opción discretizada reduce mucho la información y además ,por el plot que nos muestra Boruta, vemos que el rango entre la cifra menor y la mayor es extremadamente grande, por lo que no funcionará bien, nos interesan valores "estables", la ausencia de ellos implica que el número de reglas se aumenta exponencialmente, llegando a ser casi el doble al hacer uso de esta variable por lo que descartaremos hacer uso de ella.
+
+A partir de este punto vemos que las variables se mueven en rangos de importancia muy similares, esto implicará que los cambios entre utilizar una u otra no serán muy notorios, estaremos hablando de porcentajes bajos (entre 1% y 3%) de cambio por lo que lo hemos sometido a un proceso de Prueba-Error. El resultado de este ha sido que "savings_balance"y "credit_history" a pesar de tener menos importancia, tienen resultados muy similares.
+
+Hemos descubierto que no sale rentable añadir más variables al árbol, la razón de esto es que los márgenes de mejora son muy bajos como ya hemos comentado, en cambio el número de reglas se multiplica, además a partir de 4 o 5 variables el árbol es ilegible.
+
+Comenzamos pues el proceso de creación del árbol con las variables: checking_balance, months_loan_duration, credit_history
+
+```{r}
+data2 <- data[,c("checking_balance","months_loan_duration","credit_history","default")]
+head(data2)
+```
+Ahora procederemos a crear un conjunto de entrenamiento y otro de pruebas. Por norma general se utiliza 2/3 para el conjunto de entrenamiento que utilizaremos para construir el modelo y el 1/3 restante, el de pruebas, servirá para checkear cuán efectivo es el árbol creado.
+
+Clasificaremos mediante la variable default que es la que indica si es un cliente con riesgo o no.
+
+```{r}
+y <- data2[,4] 
+X <- data2[,c(1:3)] 
+```
+
+Hacemos la división de los datos.
+```{r}
+set.seed(1) 
+split_prop <- 3 
+indexes = sample(1:nrow(data), size=floor(((split_prop-1)/split_prop)*nrow(data)))
+trainX<-X[indexes,]
+trainy<-y[indexes]
+testX<-X[-indexes,]
+testy<-y[-indexes]
+```
+
+```{r}
+summary(trainX)
+summary(trainy)
+summary(testX)
+summary(testy)
+
+```
+
+Una vez hecha la división y obtenidos los "Summaries" podemos observar que no tenemos clasificadores sesgados y la proporción es constante en ambos conjuntos. Hemos utilizado 666 registros para el set de entrenamiento y 334 para el set de pruebas, del total de registros que teníamos que eran 1000.
+
+Creamos el modelo utilizando los datos de entrenamiento
+```{r}
+set.seed(1) 
+trainy = as.factor(trainy)
+model <- C50::C5.0(trainX, trainy,rules=TRUE )
+summary(model)
+
+```
+Podemos ver que hemos obtenido un error del 23.1%, se han clasificado mal 154 de los 666 casos.
+
+
+```{r}
+model <- C50::C5.0(trainX, trainy)
+plot(model)
+```
+
+## Explicación de las reglas obtenidas
+
+Las reglas obtenidas son las siguientes:
+
+checking_balance = unknown ->  class 1 (Riesgo) 88.6%
+
+months_loan_duration <= 27 y credit_history = {critical, repaid, delayed} ->  class 1  (Riesgo) 79.4%
+
+checking_balance = {1 - 200 DM, < 0 DM, > 200 DM} y credit_history = {fully repaid this bank, fully repaid} ->  class 2 (NO Riesgo) 73.6% 
+
+checking_balance = {1 - 200 DM, < 0 DM, > 200 DM} y months_loan_duration > 27 ->  class 2  (No Riesgo) 60.8%
+
+Lo que se resumen en:
+Si tu balance es desconocido o la duración de tu crédito menor de 27 meses y critica, retrasada, o "repagada" se te asigna como usuario de RIESGO
+Si tu balance es conocido (independientemente de la cantidad) y tu historial crediticio positivo (pagado al banco o pagado en general) o la duración del préstamos mayor de 27 meses se te clasifica como NO RIESGO
+
+
+## Análisis de la bondad de ajuste sobre el conjunto de test y matriz de confusión
+
+Para comprobar la efectividad de nuestro modelo haremos uso del set de prueba que habíamos reservado. Obtenemos una efectividad del 70.0599%
+```{r}
+predicted_model <- predict( model, testX, type="class" )
+print(sprintf("La precisión del árbol es: %.4f %%",100*sum(predicted_model == testy) / length(predicted_model)))
+```
+Un dato a tener en cuenta que podemos observar en la matriz de confusión siguiente es que a pesar de los errores los resultados son:
+26 usuarios consideramos como "riesgo" han sido catalogados como "No riesgo"
+74 usuarios considerados como "No riesgo" han sido catalogados como "riesgo"
+
+Estos son buenos resultados dentro de lo que cabe, pues es mejor no dar un crédito a un usuario que en realidad no se considera un riesgo, que sí dárselo a un usuario que probablemente no vaya a devolverlo. Las repercusiones serían peores si los resultados hubieran estado invertidos.
+
+```{r}
+mat_conf<-table(testy,Predicted=predicted_model)
+mat_conf
+```
+
+## Modelos complementarios
+La librería C50 nos da la opción de controlar algunos parámetros de la creación de árboles mediante c5.0Control.
+
+Modelo2:
+En el siguiente árbol haremos uso de este y alteraremos el parámetro noGlobalPruning.
+
+Al finalizar la creación de un árbol de clasificación se suele realizar un paso extra llamado "poda" que consiste en eliminar algunas hojas del árbol.Para ello se calcula cuál es la partición que aporta un menor ratio entre el incremento de profundidad media del árbol y el decremento del error global de clasificación. Es decir, se eliminan las hojas que menos ayudan a mejorar el árbol durante el proceso de creación.
+En este caso pondremos a TRUE ese parámetro para que la poda no se realice.
+
+```{r}
+set.seed(1) 
+model2 <- C5.0(trainX, trainy, 
+                 control = C5.0Control(noGlobalPruning = TRUE))
+summary(model2)
+predicted_model <- predict( model2, testX, type="class" )
+print(sprintf("La precisión del árbol es: %.4f %%",100*sum(predicted_model == testy) / length(predicted_model)))
+```
+```{r}
+plot(model2)
+```
+Como podemos ver se han añadido una hoja más al árbol (las que en casos anteriores eran eliminadas por la poda). Podemos observar que esto produce un aumento en la cantidad y dificultad d elas reglas, una ligera mejora en el error (de 23.1% a 22.5%) pero la precisión del árbol no se ha visto alterada. Esto es lógico porque estamos mostrando dos hojas que habían sido eliminadas por no contribuir suficiente a una mejora del error global.
+
+Modelo3:
+Otro entorno que influye en el proceso de poda es el factor de confianza que representa un umbral de error inherente permitido en los datos al podar el árbol de decisiones. Al bajar el umbral se está aplicando más poda y consecuentemente se generan modelos más generales. Esta configuración también se puede utilizar en el ajuste para lograr árboles de decisión más simples y pequeños.
+El valor por defecto del factor de confianza (CF) es 0.25, si subimos este umbral (ubicado entre 0 y 1) obtendremos árboles más específicos, es decir el resultado será similar a lo ocurrido en el paso anterior al anular la poda pues aquí accedemos directamente al factor utilizado para realizarla.
+
+En este ejemplo cambiaremos el CF de 0.25 a 1, el máximo posible.
+
+```{r}
+set.seed(1) 
+model3 <- C5.0(trainX, trainy, 
+                 control = C5.0Control(CF = 1))
+summary(model3)
+predicted_model <- predict( model3, testX, type="class" )
+print(sprintf("La precisión del árbol es: %.4f %%",100*sum(predicted_model == testy) / length(predicted_model)))
+```
+
+```{r}
+plot(model3)
+```
+Podemos ver que el árbol resultante tiene una hoja más y las reglas se han ampliado, el error se ha reducido pero la precisión global ha bajado. La razón de ello es que la poda se ha producido (puesto que en este ejemplo si que la estamos permitiendo), pero se ha aplicado menos poda, por lo que el modelo es más específico y por ello funciona peor.
+
+## Conclusiones obtenidas
+
+Nuestro primer modelo tenía una efectividad de: 
+```{r}
+predicted_model <- predict( model, testX, type="class" )
+print(sprintf("La precisión del árbol es: %.4f %%",100*sum(predicted_model == testy) / length(predicted_model)))
+```
+El segundo modelo al cual le hemos cancelado la poda final tenía una efectividad de:
+```{r}
+predicted_model <- predict( model2, testX, type="class" )
+print(sprintf("La precisión del árbol es: %.4f %%",100*sum(predicted_model == testy) / length(predicted_model)))
+```
+El tercer modelo al cual le hemos reducido el factor de confianza tenía una efectividad de: 
+```{r}
+predicted_model <- predict( model3, testX, type="class" )
+print(sprintf("La precisión del árbol es: %.4f %%",100*sum(predicted_model == testy) / length(predicted_model)))
+```
+
+Respecto a la comparación de modelos podemos obtener las siguientes conclusiones:
+EL proceso de poda es necesario, supone una reducción de hojas (mayor legilibilidad) y una reducción de las reglas (mayor simplicidad) a la vez que no se ve alterada la efecitvidad global
+
+Si queremos crear modelos más genéricos podemos hacer uso del valor de "CF" y modificarlo en consecuencia. Si este parámetro se combina con el parámetro "noGlobalPruning" podremos crear árboles más precisos pero el peligro de overfitting aumenta exponencialmente, y en vista del error y efectividad conseguida no parece rentable
+
+En términos generales hemos observado que:
+Las variables cuantitativas suelen suponer un aumento de las reglas, existe la posibilidad de convertirlas y hacerlas cualitativas pero debemos tener en cuenta la pérdida de información que se produce, además es crucial realizar una buena elección de rangos puesto que esto afectará a la discriminancia de la variable. Mayor precisión en los rangos = menor discriminancia y a la inversa.
+
+Las variables cualitativas deben ser comparadas para realizar una elección correcta de ellas. Podríamos haber realizado un PCA y el proceso sería correcto pero el árbol resultante no tendría mucho sentido en cuanto a la interpretación porque estaríamos combinando variables.
+
+A la hora de elegir estas variables cualitativas también se debe tener en cuenta los rangos en los que se mueven y para reducir la carga de trabajo posterior es buena idea realizar un "análisis lógico" de ellas, como en nuestro caso era previsible que la tenencia o no de móvil no debería ser una variable útil para la asignación o no de créditos.
+
+Para nuestro modelo en concreto hemos descubierto que las variables que mejor funcionan son: checking_balance, months_loan_duration, credit_history
+En vista de lo comentado previamente es lógico y encaja con nuestras observaciones. Además desde un punto de vista "realista" es lógico pensar que el balance de la cuenta de un usuario, la duración de sus préstamos o su historial crediticio sean factores clave para la búsqueda de usuarios de riesgo.
+
+Consideramos que en base a lo analizado tenemos otras variables con potencial como podrían ser "other_debtors", "job" o "purpose", ya que un usuario con deudas, desempleado o que necesita el dinero para un negocio ya hemos demostrado que suelen ser usuarios con gran riesgo.
+
+Creemos que con la ayuda de otra librería que permitiera crear plots más complejos y claros podríamos llegar a un modelo con mejores resultados (pues un 20%-25% de error es algo alto) y que también puediera ser genérico.
+
